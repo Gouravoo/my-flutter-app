@@ -379,11 +379,11 @@ class _DoctorPrescriptionSheetState extends State<_DoctorPrescriptionSheet> {
         await launchUrl(url);
       } else {
         // Fallback to share dialog
-        await SharePlus.instance.share(msg);
+        await Share.share(msg);
       }
     } catch (e) {
       // Fallback to share dialog
-      await SharePlus.instance.share(msg);
+      await Share.share(msg);
     }
   }
 
