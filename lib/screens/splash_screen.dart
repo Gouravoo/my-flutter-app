@@ -113,26 +113,27 @@ class _SplashScreenState extends State<SplashScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo icon with glow
+                  // App Logo
                   Container(
-                    width: 88,
-                    height: 88,
+                    width: 120,
+                    height: 120,
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(24),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withAlpha(120),
-                          blurRadius: 30,
-                          spreadRadius: 2,
-                          offset: const Offset(0, 10),
+                          color: AppColors.primary.withAlpha(50),
+                          blurRadius: 40,
+                          spreadRadius: 10,
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.medical_services_rounded,
-                      size: 44,
-                      color: Colors.white,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(30),
+                      child: Image.asset(
+                        'assets/app_icon.png',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 28),

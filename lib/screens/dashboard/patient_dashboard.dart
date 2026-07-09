@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/incoming_call_listener.dart';
@@ -31,23 +29,14 @@ class _PatientDashboardState extends State<PatientDashboard> {
   final _phoneController = TextEditingController();
   bool _bookingLoading = false;
 
-  late Razorpay _razorpay;
-
-  // Store booking data for payment callback
-  String? _pendingDoctorId;
-
   @override
   void initState() {
     super.initState();
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _fetchData();
   }
 
   @override
   void dispose() {
-    _razorpay.clear();
     _nameController.dispose();
     _ageController.dispose();
     _phoneController.dispose();
@@ -146,18 +135,31 @@ class _PatientDashboardState extends State<PatientDashboard> {
     setState(() => _bookingLoading = true);
 
     try {
-      // Get doctor ID
+      // Get doctor ID — find first active doctor
       final doctors = await _supabase
           .from('users')
           .select('uid')
           .eq('role', 'doctor')
           .limit(1);
-      _pendingDoctorId = (doctors.isNotEmpty) ? doctors[0]['uid'] : 'dr_santosh';
 
-      // Bypass Razorpay for direct booking
+      if (doctors.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No doctor available. Please try again later.'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+          setState(() => _bookingLoading = false);
+        }
+        return;
+      }
+
+      final doctorId = doctors[0]['uid'];
+
       await _supabase.from('appointments').insert({
         'patientId': _profile!['uid'],
-        'doctorId': _pendingDoctorId ?? 'dr_santosh',
+        'doctorId': doctorId,
         'date': _selectedDate,
         'time': _selectedTime,
         'status': 'scheduled',
@@ -169,7 +171,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
       await _fetchData();
       setState(() {
-        _activeTab = 0; // Stay on home page to show the upcoming appointment
+        _activeTab = 0;
         _bookingLoading = false;
       });
 
@@ -182,54 +184,13 @@ class _PatientDashboardState extends State<PatientDashboard> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving appointment: $e')),
-      );
-      setState(() => _bookingLoading = false);
-    }
-  }
-
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    try {
-      await _supabase.from('appointments').insert({
-        'patientId': _profile!['uid'],
-        'doctorId': _pendingDoctorId ?? 'dr_santosh',
-        'date': _selectedDate,
-        'time': _selectedTime,
-        'status': 'scheduled',
-        'fee': 250,
-        'patientName': _nameController.text,
-        'patientAge': _ageController.text,
-        'patientPhone': _phoneController.text,
-      });
-
-      await _fetchData();
-      setState(() {
-        _activeTab = 1;
-        _bookingLoading = false;
-      });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment successful! Appointment booked.'),
-            backgroundColor: AppColors.secondary,
-          ),
+          SnackBar(content: Text('Error saving appointment: $e')),
         );
+        setState(() => _bookingLoading = false);
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving appointment: $e')),
-      );
-      setState(() => _bookingLoading = false);
     }
-  }
-
-  void _handlePaymentError(PaymentFailureResponse response) {
-    setState(() => _bookingLoading = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Payment failed: ${response.message ?? "Unknown error"}')),
-    );
   }
 
   void _showPrescription(Map<String, dynamic> apt) {
@@ -253,30 +214,31 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // Header
-            _buildHeader(),
-            // Content
-            Expanded(
-              child: IndexedStack(
-                index: _activeTab,
-                children: [
-                  _buildHome(),
-                  _buildAppointments(),
-                  _buildProfile(),
-                ],
-              ),
+            // Main content
+            Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: IndexedStack(
+                    index: _activeTab,
+                    children: [
+                      _buildHome(),
+                      _buildAppointments(),
+                      _buildProfile(),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            // Incoming call overlay (on top of everything)
+            if (_profile != null)
+              IncomingCallListener(uid: _profile!['uid'] ?? ''),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
-      // Incoming call listener overlay
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _profile != null
-          ? IncomingCallListener(uid: _profile!['uid'] ?? '')
-          : null,
     );
   }
 
@@ -291,14 +253,24 @@ class _PatientDashboardState extends State<PatientDashboard> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(10),
+          // App logo
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              'assets/app_icon.png',
+              width: 36,
+              height: 36,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.show_chart, size: 20, color: AppColors.primary),
+              ),
             ),
-            child: const Icon(Icons.show_chart, size: 20, color: AppColors.primary),
           ),
           const SizedBox(width: 12),
           Column(
@@ -317,7 +289,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             child: Container(
               width: 36,
               height: 36,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.dangerLight,
                 shape: BoxShape.circle,
               ),
@@ -336,7 +308,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hero CTA (Only show if no upcoming appointments to save space)
+          // Hero CTA (Only show if no upcoming appointments)
           if (scheduled.isEmpty) ...[
             Container(
               width: double.infinity,
@@ -632,7 +604,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Container(
                   width: 80,
                   height: 80,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.primaryLight,
                     shape: BoxShape.circle,
                   ),
@@ -963,7 +935,6 @@ class _PrescriptionSheet extends StatelessWidget {
               text: 'Download Prescription',
               icon: Icons.download,
               onPressed: () {
-                // In Flutter, we can share as text
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Prescription saved!')),
                 );
