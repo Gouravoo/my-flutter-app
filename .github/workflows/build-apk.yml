@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK and AAB
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build APK
+    name: Build APK and AAB
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -33,8 +33,17 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
+      - name: Build AAB
+        run: flutter build appbundle --release
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: AarogyaPlus-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AarogyaPlus-Release-AAB
+          path: build/app/outputs/bundle/release/app-release.aab
