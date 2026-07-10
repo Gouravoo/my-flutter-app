@@ -72,10 +72,10 @@ class ZegoCallService {
         canInvitingInCalling: false, // Don't allow calling while in a call
       ),
       requireConfig: (ZegoCallInvitationData data) {
-        final config = ZegoCallInvitationInCallingConfig();
         if (data.type == ZegoCallInvitationType.videoCall) {
           return ZegoUIKitPrebuiltCallConfig.oneOnOneVideoCall()
             ..useSpeakerWhenJoining = true
+            ..enableAccidentalTouchPrevention = false
             ..topMenuBar.isVisible = true
             ..bottomMenuBar.buttons = [
               ZegoCallMenuBarButtonName.toggleCameraButton,
@@ -85,7 +85,8 @@ class ZegoCallService {
               ZegoCallMenuBarButtonName.switchCameraButton,
             ];
         } else {
-          return ZegoUIKitPrebuiltCallConfig.oneOnOneVoiceCall();
+          return ZegoUIKitPrebuiltCallConfig.oneOnOneVoiceCall()
+            ..enableAccidentalTouchPrevention = false;
         }
       },
     );
