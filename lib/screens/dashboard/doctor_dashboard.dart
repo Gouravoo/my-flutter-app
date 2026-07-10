@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -24,11 +25,39 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   List<Map<String, dynamic>> _appointments = [];
   bool _loading = true;
   int _activeTab = 0;
+  StreamSubscription? _appointmentSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    _listenForNewAppointments();
+  }
+
+  @override
+  void dispose() {
+    _appointmentSubscription?.cancel();
+    super.dispose();
+  }
+
+  /// Listen for realtime changes in appointments table so new bookings appear instantly
+  void _listenForNewAppointments() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    _appointmentSubscription = _supabase
+        .from('appointments')
+        .stream(primaryKey: ['id'])
+        .eq('doctorId', user.id)
+        .listen((data) {
+          if (mounted) {
+            setState(() {
+              _appointments = List<Map<String, dynamic>>.from(data);
+              // Sort by date descending
+              _appointments.sort((a, b) => (b['date'] ?? '').compareTo(a['date'] ?? ''));
+            });
+          }
+        });
   }
 
   Future<void> _fetchData() async {
@@ -107,54 +136,61 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withAlpha(220),
-                border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withAlpha(30))),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(color: AppColors.secondaryLight, borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.medical_services, size: 20, color: AppColors.secondary),
+            // Main content
+            Column(
+              children: [
+                // Header with logo
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withAlpha(220),
+                    border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withAlpha(30))),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text('Dr. ${_profile?['name']?.toString().split(' ')[0] ?? 'Doctor'}',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      Text('Ready for consultation?', style: Theme.of(context).textTheme.bodySmall),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset('assets/app_icon.png', width: 36, height: 36, fit: BoxFit.cover),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Dr. ${_profile?['name']?.toString().split(' ')[0] ?? 'Doctor'}',
+                              style: Theme.of(context).textTheme.titleLarge),
+                          Text('Ready for consultation?', style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _handleLogout,
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: const BoxDecoration(color: AppColors.dangerLight, shape: BoxShape.circle),
+                          child: const Icon(Icons.logout, size: 16, color: AppColors.danger),
+                        ),
+                      ),
                     ],
                   ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: _handleLogout,
-                    child: Container(
-                      width: 36, height: 36,
-                      decoration: const BoxDecoration(color: AppColors.dangerLight, shape: BoxShape.circle),
-                      child: const Icon(Icons.logout, size: 16, color: AppColors.danger),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-            Expanded(
-              child: IndexedStack(
-                index: _activeTab,
-                children: [
-                  _buildHome(scheduledCount, completedCount),
-                  _buildSchedule(),
-                  _buildProfile(),
-                ],
-              ),
+                Expanded(
+                  child: IndexedStack(
+                    index: _activeTab,
+                    children: [
+                      _buildHome(scheduledCount, completedCount),
+                      _buildSchedule(),
+                      _buildProfile(),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            // Incoming call overlay (on top of everything — proper Stack layout)
+            if (_profile != null)
+              IncomingCallListener(uid: _profile!['uid'] ?? ''),
           ],
         ),
       ),
@@ -175,9 +211,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           ),
         ),
       ),
-      floatingActionButton: _profile != null
-          ? IncomingCallListener(uid: _profile!['uid'] ?? '')
-          : null,
     );
   }
 

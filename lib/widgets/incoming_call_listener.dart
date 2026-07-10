@@ -10,7 +10,7 @@ import '../screens/call/call_screen.dart';
 
 /// WhatsApp-style incoming call listener.
 ///
-/// Wrap your dashboard content in a Stack and place this on top:
+/// Place this inside a Stack on top of your main content:
 /// ```dart
 /// Stack(children: [
 ///   yourMainContent,
@@ -33,6 +33,9 @@ class _IncomingCallListenerState extends State<IncomingCallListener>
   String? _appointmentId;
   String? _callerName;
   Timer? _autoDeclineTimer;
+
+  // Prevents re-triggering after accept/during call
+  bool _inCall = false;
 
   // Animations
   late AnimationController _pulseController;
@@ -73,6 +76,12 @@ class _IncomingCallListenerState extends State<IncomingCallListener>
   void _subscribe() {
     if (widget.uid.isEmpty) return;
 
+    // Remove old channel first to avoid duplicates
+    if (_channel != null) {
+      _supabase.removeChannel(_channel!);
+      _channel = null;
+    }
+
     _channel = _supabase.channel('calls_${widget.uid}',
         opts: const RealtimeChannelConfig(ack: true));
 
@@ -81,7 +90,8 @@ class _IncomingCallListenerState extends State<IncomingCallListener>
           event: 'incoming_call',
           callback: (payload) {
             debugPrint('📞 Incoming call received: $payload');
-            if (mounted && _appointmentId == null) {
+            // Only show if not already in a call and no current incoming call
+            if (mounted && _appointmentId == null && !_inCall) {
               setState(() {
                 _appointmentId = payload['appointmentId']?.toString();
                 _callerName =
@@ -96,6 +106,45 @@ class _IncomingCallListenerState extends State<IncomingCallListener>
                 if (mounted && _appointmentId != null) {
                   _decline();
                 }
+              });
+            } else if (_inCall && mounted) {
+              // Already in a call — show "busy" snackbar briefly
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '${payload['callerName'] ?? 'Someone'} is calling, but you are busy.',
+                  ),
+                  duration: const Duration(seconds: 3),
+                  backgroundColor: AppColors.accent,
+                ),
+              );
+            }
+          },
+        )
+        .onBroadcast(
+          event: 'call_accepted',
+          callback: (payload) {
+            debugPrint('✅ Call accepted by other party: $payload');
+            // The other side accepted — stop ringing immediately
+            if (mounted && _isRinging) {
+              _stopRinging();
+              setState(() {
+                _appointmentId = null;
+                _callerName = null;
+              });
+            }
+          },
+        )
+        .onBroadcast(
+          event: 'call_ended',
+          callback: (payload) {
+            debugPrint('📴 Call ended by other party: $payload');
+            // The other side ended the call — stop everything
+            if (mounted) {
+              _stopRinging();
+              setState(() {
+                _appointmentId = null;
+                _callerName = null;
               });
             }
           },
@@ -165,13 +214,24 @@ class _IncomingCallListenerState extends State<IncomingCallListener>
     setState(() {
       _appointmentId = null;
       _callerName = null;
+      _inCall = true; // Mark as in-call to block future incoming calls
     });
     if (aptId != null) {
       HapticFeedback.mediumImpact();
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => CallScreen(appointmentId: aptId)),
-      );
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            appointmentId: aptId,
+            isIncoming: true, // Mark as incoming so it doesn't re-broadcast
+          ),
+        ),
+      ).then((_) {
+        // When returning from call, mark as available again
+        if (mounted) {
+          setState(() => _inCall = false);
+        }
+      });
     }
   }
 

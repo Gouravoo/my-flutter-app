@@ -7,8 +7,14 @@ import '../../core/theme.dart';
 
 class CallScreen extends StatefulWidget {
   final String appointmentId;
+  /// true when user accepted an incoming call (don't re-broadcast)
+  final bool isIncoming;
 
-  const CallScreen({super.key, required this.appointmentId});
+  const CallScreen({
+    super.key,
+    required this.appointmentId,
+    this.isIncoming = false,
+  });
 
   @override
   State<CallScreen> createState() => _CallScreenState();
@@ -21,12 +27,13 @@ class _CallScreenState extends State<CallScreen>
   bool _loading = true;
   String _callerName = 'User';
   String _userId = '';
+  String _otherUserId = '';
 
   // ZegoCloud credentials
   int? _appID;
   String? _appSign;
 
-  // "Ringing..." animation
+  // "Connecting..." animation
   late AnimationController _dotController;
 
   @override
@@ -122,12 +129,14 @@ class _CallScreenState extends State<CallScreen>
           ? (profile?['name'] ?? 'Patient')
           : 'Dr. ${profile?['name'] ?? 'Doctor'}';
 
-      // Broadcast incoming call to the other user via Supabase Realtime
-      final targetIds = [apt['patientId'], apt['doctorId']];
-      for (final targetUid in targetIds) {
-        if (targetUid == null || targetUid == user.id) continue;
+      // Determine the other user's ID
+      _otherUserId = isPatient
+          ? (apt['doctorId']?.toString() ?? '')
+          : (apt['patientId']?.toString() ?? '');
 
-        final channel = _supabase.channel('calls_$targetUid',
+      // ONLY broadcast "incoming_call" if this is an OUTGOING call (not accepting an incoming one)
+      if (!widget.isIncoming && _otherUserId.isNotEmpty) {
+        final channel = _supabase.channel('calls_$_otherUserId',
             opts: const RealtimeChannelConfig(ack: true));
 
         channel.subscribe((status, [error]) async {
@@ -139,12 +148,16 @@ class _CallScreenState extends State<CallScreen>
                 'callerName': _callerName,
               },
             );
-            // Delay removing channel to ensure message is sent
             Future.delayed(const Duration(seconds: 1), () {
               _supabase.removeChannel(channel);
             });
           }
         });
+      }
+
+      // If this is an INCOMING call being accepted, tell the caller to stop ringing
+      if (widget.isIncoming && _otherUserId.isNotEmpty) {
+        _broadcastCallAccepted();
       }
 
       setState(() => _loading = false);
@@ -156,17 +169,50 @@ class _CallScreenState extends State<CallScreen>
     }
   }
 
-  /// Update appointment status to 'completed' when call ends
+  /// Broadcast "call_accepted" so the other party's IncomingCallListener stops ringing
+  Future<void> _broadcastCallAccepted() async {
+    final channel = _supabase.channel('calls_$_otherUserId',
+        opts: const RealtimeChannelConfig(ack: true));
+
+    channel.subscribe((status, [error]) async {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        await channel.sendBroadcastMessage(
+          event: 'call_accepted',
+          payload: {
+            'appointmentId': widget.appointmentId,
+          },
+        );
+        Future.delayed(const Duration(seconds: 1), () {
+          _supabase.removeChannel(channel);
+        });
+      }
+    });
+  }
+
+  /// Broadcast "call_ended" so both sides can clean up
+  Future<void> _broadcastCallEnded() async {
+    if (_otherUserId.isEmpty) return;
+    final channel = _supabase.channel('calls_$_otherUserId',
+        opts: const RealtimeChannelConfig(ack: true));
+
+    channel.subscribe((status, [error]) async {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        await channel.sendBroadcastMessage(
+          event: 'call_ended',
+          payload: {
+            'appointmentId': widget.appointmentId,
+          },
+        );
+        Future.delayed(const Duration(seconds: 1), () {
+          _supabase.removeChannel(channel);
+        });
+      }
+    });
+  }
+
+  /// When call ends — DO NOT auto-complete appointment. Just go back.
   Future<void> _onCallEnd() async {
-    try {
-      await _supabase
-          .from('appointments')
-          .update({'status': 'completed'})
-          .eq('id', widget.appointmentId);
-      debugPrint('✅ Appointment ${widget.appointmentId} marked as completed');
-    } catch (e) {
-      debugPrint('❌ Failed to update appointment status: $e');
-    }
+    await _broadcastCallEnded();
     if (mounted) {
       Navigator.of(context).pop();
     }
@@ -222,7 +268,7 @@ class _CallScreenState extends State<CallScreen>
       );
     }
 
-    // Loading / "Calling..." state with animated dots
+    // Loading / "Connecting..." state with animated dots
     if (_loading) {
       return Scaffold(
         backgroundColor: const Color(0xFF111827),
@@ -230,7 +276,6 @@ class _CallScreenState extends State<CallScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Animated phone icon
               Container(
                 width: 80,
                 height: 80,
