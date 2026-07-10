@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
-import '../../widgets/incoming_call_listener.dart';
+import '../../services/zego_call_service.dart';
 import '../auth/login_screen.dart';
-import '../call/call_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -82,6 +83,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Future<void> _handleLogout() async {
+    await ZegoCallService.instance.uninit();
     await _supabase.auth.signOut();
     if (mounted) {
       Navigator.pushAndRemoveUntil(
@@ -122,15 +124,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Future<void> _proceedToPayment(BuildContext sheetContext) async {
-    if (_selectedDate.isEmpty || _selectedTime.isEmpty ||
-        _nameController.text.trim().isEmpty || _ageController.text.trim().isEmpty ||
-        _phoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all details before proceeding.')),
-      );
-      return;
-    }
-
     Navigator.pop(sheetContext);
     setState(() => _bookingLoading = true);
 
@@ -232,9 +225,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 ),
               ],
             ),
-            // Incoming call overlay (on top of everything)
-            if (_profile != null)
-              IncomingCallListener(uid: _profile!['uid'] ?? ''),
           ],
         ),
       ),
@@ -471,11 +461,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     text: 'Join Video Call',
                     icon: Icons.videocam,
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CallScreen(appointmentId: scheduled[0]['id'].toString()),
-                        ),
+                      final targetUserId = scheduled[0]['doctorId'].toString().replaceAll('-', '');
+                      ZegoUIKitPrebuiltCallInvitationService().sendInvitation(
+                        invitees: [ZegoCallUser(targetUserId, 'Dr. Santosh Kumar Singh')],
+                        isVideoCall: true,
+                        customData: scheduled[0]['id'].toString(),
                       );
                     },
                   ),
@@ -556,11 +546,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
                                 text: 'Join Call',
                                 icon: Icons.videocam,
                                 onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CallScreen(appointmentId: apt['id'].toString()),
-                                    ),
+                                  final targetUserId = apt['doctorId'].toString().replaceAll('-', '');
+                                  ZegoUIKitPrebuiltCallInvitationService().sendInvitation(
+                                    invitees: [ZegoCallUser(targetUserId, 'Dr. Santosh Kumar Singh')],
+                                    isVideoCall: true,
+                                    customData: apt['id'].toString(),
                                   );
                                 },
                               ),
@@ -703,6 +693,7 @@ class _BookingSheet extends StatefulWidget {
 class _BookingSheetState extends State<_BookingSheet> {
   late String _date;
   late String _time;
+  String? _errorMsg;
   final _times = ['10:00 AM', '11:30 AM', '02:00 PM', '04:30 PM', '06:00 PM'];
 
   @override
@@ -850,12 +841,28 @@ class _BookingSheetState extends State<_BookingSheet> {
                 Expanded(flex: 2, child: PremiumTextField(label: 'Phone Number', hint: 'WhatsApp Number', controller: widget.phoneController, keyboardType: TextInputType.phone)),
               ],
             ),
-            const SizedBox(height: 8),
+            if (_errorMsg != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _errorMsg!,
+                style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ],
+            const SizedBox(height: 16),
             PrimaryButton(
               text: 'Confirm Appointment',
               icon: Icons.check_circle_outline,
               isLoading: widget.isLoading,
-              onPressed: widget.onProceedPayment,
+              onPressed: () {
+                if (_date.isEmpty || _time.isEmpty ||
+                    widget.nameController.text.trim().isEmpty || widget.ageController.text.trim().isEmpty ||
+                    widget.phoneController.text.trim().isEmpty) {
+                  setState(() => _errorMsg = 'Please fill in all details before proceeding.');
+                } else {
+                  setState(() => _errorMsg = null);
+                  widget.onProceedPayment();
+                }
+              },
             ),
           ],
         ),

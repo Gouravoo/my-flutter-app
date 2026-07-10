@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../services/zego_call_service.dart';
 import '../dashboard/patient_dashboard.dart';
 import '../dashboard/doctor_dashboard.dart';
 import '../dashboard/admin_dashboard.dart';
@@ -35,17 +36,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (res.user == null) throw Exception('Login failed');
 
-      // Fetch user role
+      // Fetch user role & name
       final profile = await Supabase.instance.client
           .from('users')
-          .select('role')
+          .select('role, name')
           .eq('uid', res.user!.id)
           .single();
 
       if (!mounted) return;
 
-      Widget destination;
       final role = profile['role'] as String?;
+      final userName = profile['name'] as String? ?? 'User';
+
+      // Initialize Zego Call Service for background call support
+      if (role != 'admin') {
+        ZegoCallService.instance.init(
+          context: context,
+          userId: res.user!.id,
+          userName: role == 'doctor' ? 'Dr. $userName' : userName,
+        );
+      }
+
+      Widget destination;
       if (role == 'admin') {
         destination = const AdminDashboard();
       } else if (role == 'doctor') {

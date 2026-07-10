@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../services/zego_call_service.dart';
 import '../auth/login_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -64,6 +66,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _handleLogout() async {
+    await ZegoCallService.instance.uninit();
     await _supabase.auth.signOut();
     if (mounted) {
       Navigator.pushAndRemoveUntil(

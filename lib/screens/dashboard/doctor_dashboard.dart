@@ -6,11 +6,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
+import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
-import '../../widgets/incoming_call_listener.dart';
+import '../../services/zego_call_service.dart';
 import '../auth/login_screen.dart';
-import '../call/call_screen.dart';
 
 class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({super.key});
@@ -91,6 +91,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 
   Future<void> _handleLogout() async {
+    await ZegoCallService.instance.uninit();
     await _supabase.auth.signOut();
     if (mounted) {
       Navigator.pushAndRemoveUntil(
@@ -188,9 +189,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                 ),
               ],
             ),
-            // Incoming call overlay (on top of everything — proper Stack layout)
-            if (_profile != null)
-              IncomingCallListener(uid: _profile!['uid'] ?? ''),
           ],
         ),
       ),
@@ -336,11 +334,11 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CallScreen(appointmentId: scheduled[0]['id'].toString()),
-                          ),
+                        final targetUserId = scheduled[0]['patientId'].toString().replaceAll('-', '');
+                        ZegoUIKitPrebuiltCallInvitationService().sendInvitation(
+                          invitees: [ZegoCallUser(targetUserId, scheduled[0]['patientName'] ?? 'Patient')],
+                          isVideoCall: true,
+                          customData: scheduled[0]['id'].toString(),
                         );
                       },
                       icon: const Icon(Icons.videocam, size: 16),
@@ -444,11 +442,11 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                 text: 'Call',
                                 icon: Icons.videocam,
                                 onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CallScreen(appointmentId: apt['id'].toString()),
-                                    ),
+                                  final targetUserId = apt['patientId'].toString().replaceAll('-', '');
+                                  ZegoUIKitPrebuiltCallInvitationService().sendInvitation(
+                                    invitees: [ZegoCallUser(targetUserId, apt['patientName'] ?? 'Patient')],
+                                    isVideoCall: true,
+                                    customData: apt['id'].toString(),
                                   );
                                 },
                               ),

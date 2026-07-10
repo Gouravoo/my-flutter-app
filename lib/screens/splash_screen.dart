@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
+import '../services/zego_call_service.dart';
 import 'auth/login_screen.dart';
 import 'dashboard/patient_dashboard.dart';
 import 'dashboard/doctor_dashboard.dart';
@@ -57,13 +58,24 @@ class _SplashScreenState extends State<SplashScreen>
 
     final res = await Supabase.instance.client
         .from('users')
-        .select('role')
+        .select('role, name')
         .eq('uid', session.user.id)
         .maybeSingle();
 
     if (!mounted) return;
 
     final role = res?['role'] as String?;
+    final userName = res?['name'] as String? ?? 'User';
+
+    // Initialize Zego Call Service for background call support
+    if (role != 'admin') {
+      ZegoCallService.instance.init(
+        context: context,
+        userId: session.user.id,
+        userName: role == 'doctor' ? 'Dr. $userName' : userName,
+      );
+    }
+
     Widget destination;
     if (role == 'admin') {
       destination = const AdminDashboard();
