@@ -63,8 +63,6 @@ class ZegoCallService {
         androidNotificationConfig: ZegoCallAndroidNotificationConfig(
           channelID: 'medicine_tele_call',
           channelName: 'Call Notifications',
-          sound: 'ringtone',
-          icon: 'notification_icon',
         ),
       ),
       config: ZegoCallInvitationConfig(
