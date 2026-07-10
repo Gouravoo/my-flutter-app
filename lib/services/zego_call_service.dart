@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
+import '../core/offline_call_setup_helper.dart';
 
 /// Manages Zego Call Invitation Service for background/offline call ringing.
 ///
@@ -88,6 +89,9 @@ class ZegoCallService {
         }
       },
     );
+
+    // Prompt user for background permissions gracefully
+    OfflineCallSetupHelper.checkAndRequestPermissions(context);
 
     _initialized = true;
     debugPrint('✅ Zego Call Invitation Service initialized for $userName ($zegoUserId)');
