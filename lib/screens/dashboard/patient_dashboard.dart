@@ -308,49 +308,47 @@ class _PatientDashboardState extends State<PatientDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hero CTA (Only show if no upcoming appointments)
-          if (scheduled.isEmpty) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withAlpha(100),
-                    blurRadius: 32,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Need a Consultation?',
-                      style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
-                  const SizedBox(height: 6),
-                  Text('Book a video call with our specialist doctor today.',
-                      style: GoogleFonts.inter(fontSize: 13, color: Colors.white70)),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _startBooking,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      child: Text('Book Appointment', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ],
-              ),
+          // Hero CTA
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withAlpha(100),
+                  blurRadius: 32,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-          ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Need a Consultation?',
+                    style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+                const SizedBox(height: 6),
+                Text('Book a video call with our specialist doctor today.',
+                    style: GoogleFonts.inter(fontSize: 13, color: Colors.white70)),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _startBooking,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Book Appointment', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           Text('Our Specialist', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
 
@@ -426,20 +424,18 @@ class _PatientDashboardState extends State<PatientDashboard> {
                             ],
                           ),
                         ),
-                        if (scheduled.isEmpty) ...[
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: _startBooking,
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              child: Text('Book Now', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: _startBooking,
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
+                            child: Text('Book Now', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
                           ),
-                        ]
+                        ),
                       ],
                     ),
                   ),

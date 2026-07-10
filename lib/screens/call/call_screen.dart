@@ -123,11 +123,28 @@ class _CallScreenState extends State<CallScreen>
           : 'Dr. ${profile?['name'] ?? 'Doctor'}';
 
       // Broadcast incoming call to the other user via Supabase Realtime
-      // Using retry logic for reliability
       final targetIds = [apt['patientId'], apt['doctorId']];
       for (final targetUid in targetIds) {
         if (targetUid == null || targetUid == user.id) continue;
-        await _sendCallBroadcast(targetUid.toString());
+
+        final channel = _supabase.channel('calls_$targetUid',
+            opts: const RealtimeChannelConfig(ack: true));
+
+        channel.subscribe((status, [error]) async {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            await channel.sendBroadcastMessage(
+              event: 'incoming_call',
+              payload: {
+                'appointmentId': widget.appointmentId,
+                'callerName': _callerName,
+              },
+            );
+            // Delay removing channel to ensure message is sent
+            Future.delayed(const Duration(seconds: 1), () {
+              _supabase.removeChannel(channel);
+            });
+          }
+        });
       }
 
       setState(() => _loading = false);
@@ -137,52 +154,6 @@ class _CallScreenState extends State<CallScreen>
         _loading = false;
       });
     }
-  }
-
-  /// Send call broadcast with retry logic for reliability
-  Future<void> _sendCallBroadcast(String targetUid) async {
-    final channel = _supabase.channel('calls_$targetUid',
-        opts: const RealtimeChannelConfig(ack: true));
-
-    final completer = Completer<void>();
-
-    channel.subscribe((status, [error]) async {
-      if (status == RealtimeSubscribeStatus.subscribed) {
-        // Send broadcast 3 times with delays for reliability
-        for (int i = 0; i < 3; i++) {
-          try {
-            await channel.sendBroadcastMessage(
-              event: 'incoming_call',
-              payload: {
-                'appointmentId': widget.appointmentId,
-                'callerName': _callerName,
-              },
-            );
-          } catch (e) {
-            debugPrint('Broadcast attempt ${i + 1} failed: $e');
-          }
-          if (i < 2) {
-            await Future.delayed(const Duration(milliseconds: 500));
-          }
-        }
-
-        // Give more time for delivery before removing channel
-        Future.delayed(const Duration(seconds: 3), () {
-          _supabase.removeChannel(channel);
-          if (!completer.isCompleted) completer.complete();
-        });
-      }
-    });
-
-    // Timeout after 8 seconds
-    Future.delayed(const Duration(seconds: 8), () {
-      if (!completer.isCompleted) {
-        _supabase.removeChannel(channel);
-        completer.complete();
-      }
-    });
-
-    return completer.future;
   }
 
   /// Update appointment status to 'completed' when call ends

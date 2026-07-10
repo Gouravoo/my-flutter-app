@@ -1,10 +1,10 @@
-import 'dart:io';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/incoming_call_listener.dart';
@@ -23,6 +23,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   Map<String, dynamic>? _profile;
   List<Map<String, dynamic>> _appointments = [];
   bool _loading = true;
+  int _activeTab = 0;
 
   @override
   void initState() {
@@ -40,12 +41,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         return;
       }
 
-      final profileData = await _supabase
-          .from('users')
-          .select('*')
-          .eq('uid', user.id)
-          .single();
-
+      final profileData = await _supabase.from('users').select('*').eq('uid', user.id).single();
       final appointmentsData = await _supabase
           .from('appointments')
           .select('*')
@@ -60,7 +56,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         });
       }
     } catch (e) {
-      debugPrint('Error fetching data: $e');
+      debugPrint('Error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -76,7 +72,16 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     }
   }
 
-  void _showPrescriptionDialog(Map<String, dynamic> apt) {
+  Future<void> _markCompleted(String id) async {
+    try {
+      await _supabase.from('appointments').update({'status': 'completed'}).eq('id', id);
+      await _fetchData();
+    } catch (e) {
+      debugPrint('Error: $e');
+    }
+  }
+
+  void _openPrescriptionSheet(Map<String, dynamic> apt) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -84,6 +89,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       builder: (ctx) => _DoctorPrescriptionSheet(
         appointment: apt,
         onSaved: () {
+          Navigator.pop(ctx);
           _fetchData();
         },
       ),
@@ -93,189 +99,401 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppColors.secondary)));
     }
+
+    final scheduledCount = _appointments.where((a) => a['status'] == 'scheduled').length;
+    final completedCount = _appointments.where((a) => a['status'] == 'completed').length;
 
     return Scaffold(
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _fetchData,
-                    child: _buildAppointmentsList(),
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withAlpha(220),
+                border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withAlpha(30))),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(color: AppColors.secondaryLight, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.medical_services, size: 20, color: AppColors.secondary),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Dr. ${_profile?['name']?.toString().split(' ')[0] ?? 'Doctor'}',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      Text('Ready for consultation?', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _handleLogout,
+                    child: Container(
+                      width: 36, height: 36,
+                      decoration: const BoxDecoration(color: AppColors.dangerLight, shape: BoxShape.circle),
+                      child: const Icon(Icons.logout, size: 16, color: AppColors.danger),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            // Incoming call overlay (on top of everything)
-            if (_profile != null)
-              IncomingCallListener(uid: _profile!['uid'] ?? ''),
+
+            Expanded(
+              child: IndexedStack(
+                index: _activeTab,
+                children: [
+                  _buildHome(scheduledCount, completedCount),
+                  _buildSchedule(),
+                  _buildProfile(),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(top: BorderSide(color: Theme.of(context).dividerColor.withAlpha(30))),
+        ),
+        child: SafeArea(
+          child: BottomNavigationBar(
+            currentIndex: _activeTab,
+            onTap: (i) => setState(() => _activeTab = i),
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Overview'),
+              BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Schedule'),
+              BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: _profile != null
+          ? IncomingCallListener(uid: _profile!['uid'] ?? '')
+          : null,
+    );
+  }
+
+  Widget _buildHome(int scheduledCount, int completedCount) {
+    final scheduled = _appointments.where((a) => a['status'] == 'scheduled').toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Overview', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 12),
+
+          // Stats
+          Row(
+            children: [
+              Expanded(
+                child: GlassCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8, height: 8,
+                            decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('SCHEDULED', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text('$scheduledCount', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.access_time, size: 16, color: AppColors.accent),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GlassCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8, height: 8,
+                            decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('COMPLETED', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text('$completedCount', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.check_circle, size: 16, color: AppColors.secondary),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Next patient
+          if (scheduled.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Text('Next Patient', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: AppColors.secondaryGradient,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(color: AppColors.secondary.withAlpha(100), blurRadius: 32, offset: const Offset(0, 8)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${scheduled[0]['date']} â€¢ ${scheduled[0]['time']}',
+                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(50),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('Upcoming', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    scheduled[0]['patientName'] ?? 'Patient #${scheduled[0]['patientId'].toString().substring(0, 6)}',
+                    style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.w700, color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Age: ${scheduled[0]['patientAge'] ?? 'N/A'} â€¢ ${scheduled[0]['patientPhone'] ?? 'No Phone'}',
+                    style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CallScreen(appointmentId: scheduled[0]['id'].toString()),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.videocam, size: 16),
+                      label: const Text('Start Call'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.secondary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withAlpha(220),
-        border: Border(
-          bottom: BorderSide(color: Theme.of(context).dividerColor.withAlpha(30)),
-        ),
-      ),
-      child: Row(
+  Widget _buildSchedule() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/app_icon.png',
-              width: 36,
-              height: 36,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(10),
+          Text('All Schedule', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 16),
+          if (_appointments.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Column(
+                  children: [
+                    Icon(Icons.calendar_today, size: 40, color: AppColors.textLight.withAlpha(80)),
+                    const SizedBox(height: 12),
+                    Text('No appointments yet', style: Theme.of(context).textTheme.bodyMedium),
+                  ],
                 ),
-                child: const Icon(Icons.medical_services, size: 20, color: AppColors.primary),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Dr. ${_profile?['name']?.toString().split(' ')[0] ?? 'Doctor'}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text('Doctor Dashboard', style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: _handleLogout,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                color: AppColors.dangerLight,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.logout, size: 16, color: AppColors.danger),
+            )
+          else
+            ..._appointments.map((apt) => GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 32, height: 32,
+                            decoration: const BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
+                            child: Center(
+                              child: Text(
+                                (apt['patientName'] ?? 'P').toString().substring(0, 1).toUpperCase(),
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(apt['patientName'] ?? 'Patient #${apt['patientId'].toString().substring(0, 8)}',
+                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+                                Text(apt['patientPhone'] ?? 'No Phone',
+                                    style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                              ],
+                            ),
+                          ),
+                          StatusBadge(
+                            text: apt['status'],
+                            color: apt['status'] == 'scheduled' ? const Color(0xFFB45309) : AppColors.secondary,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time, size: 14, color: AppColors.textMuted),
+                            const SizedBox(width: 6),
+                            Text('${apt['date']} at ${apt['time']}',
+                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (apt['status'] == 'scheduled')
+                        Row(
+                          children: [
+                            Expanded(
+                              child: PrimaryButton(
+                                text: 'Call',
+                                icon: Icons.videocam,
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CallScreen(appointmentId: apt['id'].toString()),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SecondaryButton(
+                                text: 'Done',
+                                icon: Icons.check_circle,
+                                color: AppColors.secondary,
+                                onPressed: () => _markCompleted(apt['id'].toString()),
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (apt['status'] == 'completed')
+                        PrimaryButton(
+                          text: apt['prescription'] != null ? 'Edit Prescription' : 'Write Prescription',
+                          icon: Icons.description,
+                          onPressed: () => _openPrescriptionSheet(apt),
+                        ),
+                    ],
+                  ),
+                )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfile() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Profile', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 16),
+          GlassCard(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                Container(
+                  width: 80, height: 80,
+                  decoration: const BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
+                  child: Center(
+                    child: Text('D', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Dr. ${_profile?['name'] ?? 'Doctor'}', style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 4),
+                Text(_profile?['email'] ?? '', style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _handleLogout,
+                    icon: const Icon(Icons.logout, size: 16),
+                    label: const Text('Log Out'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.dangerLight,
+                      foregroundColor: AppColors.danger,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildAppointmentsList() {
-    if (_appointments.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.event_available, size: 64, color: AppColors.textLight.withAlpha(80)),
-            const SizedBox(height: 16),
-            Text('No appointments yet', style: Theme.of(context).textTheme.bodyLarge),
-          ],
-        ),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _appointments.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
-      itemBuilder: (context, index) {
-        final apt = _appointments[index];
-        final isScheduled = apt['status'] == 'scheduled';
-
-        return GlassCard(
-          borderLeftColor: isScheduled ? AppColors.secondary : AppColors.textLight,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(apt['patientName'] ?? 'Unknown Patient',
-                            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.access_time, size: 12, color: AppColors.textMuted),
-                            const SizedBox(width: 4),
-                            Text('${apt['date']} • ${apt['time']}',
-                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
-                            const SizedBox(width: 12),
-                            const Icon(Icons.cake, size: 12, color: AppColors.textMuted),
-                            const SizedBox(width: 4),
-                            Text('${apt['patientAge'] ?? '?'} yrs',
-                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  StatusBadge(
-                    text: apt['status'],
-                    color: isScheduled ? AppColors.secondary : AppColors.textLight,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  if (isScheduled)
-                    Expanded(
-                      child: PrimaryButton(
-                        text: 'Start Call',
-                        icon: Icons.videocam,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CallScreen(appointmentId: apt['id'].toString()),
-                            ),
-                          ).then((_) => _fetchData());
-                        },
-                      ),
-                    ),
-                  if (isScheduled) const SizedBox(width: 8),
-                  Expanded(
-                    child: SecondaryButton(
-                      text: apt['prescription'] == null ? 'Write Prescription' : 'View Prescription',
-                      icon: Icons.edit_document,
-                      onPressed: () => _showPrescriptionDialog(apt),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
-// ===== Doctor Prescription Sheet =====
+// ===== Doctor Prescription Bottom Sheet =====
 class _DoctorPrescriptionSheet extends StatefulWidget {
   final Map<String, dynamic> appointment;
   final VoidCallback onSaved;
@@ -379,11 +597,11 @@ class _DoctorPrescriptionSheetState extends State<_DoctorPrescriptionSheet> {
         await launchUrl(url);
       } else {
         // Fallback to share dialog
-        await Share.share(msg);
+        await SharePlus.instance.share(ShareParams(text: msg));
       }
     } catch (e) {
       // Fallback to share dialog
-      await Share.share(msg);
+      await SharePlus.instance.share(ShareParams(text: msg));
     }
   }
 
@@ -499,3 +717,5 @@ class _DoctorPrescriptionSheetState extends State<_DoctorPrescriptionSheet> {
     );
   }
 }
+
+
