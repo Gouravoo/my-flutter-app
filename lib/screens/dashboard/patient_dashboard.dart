@@ -63,13 +63,43 @@ class _PatientDashboardState extends State<PatientDashboard> {
       final appointmentsData = await _supabase
           .from('appointments')
           .select('*')
-          .eq('patientId', user.id)
-          .order('date', ascending: false);
+          .eq('patientId', user.id);
 
       if (mounted) {
         setState(() {
           _profile = profileData;
-          _appointments = List<Map<String, dynamic>>.from(appointmentsData);
+          
+          // In-memory custom sorting
+          final List<Map<String, dynamic>> fetchedAppointments = List<Map<String, dynamic>>.from(appointmentsData);
+          fetchedAppointments.sort((a, b) {
+            final aStatus = a['status'] ?? 'scheduled';
+            final bStatus = b['status'] ?? 'scheduled';
+            
+            // 1. Sort by status (scheduled first, completed second)
+            if (aStatus == 'scheduled' && bStatus == 'completed') return -1;
+            if (aStatus == 'completed' && bStatus == 'scheduled') return 1;
+            
+            // 2. Sort by date (scheduled: nearest first (ascending), completed: most recent first (descending))
+            final aDateStr = a['date'] ?? '';
+            final bDateStr = b['date'] ?? '';
+            final aTimeStr = a['time'] ?? '';
+            final bTimeStr = b['time'] ?? '';
+            
+            try {
+              final aDateTime = DateTime.parse('$aDateStr $aTimeStr');
+              final bDateTime = DateTime.parse('$bDateStr $bTimeStr');
+              
+              if (aStatus == 'scheduled') {
+                return aDateTime.compareTo(bDateTime);
+              } else {
+                return bDateTime.compareTo(aDateTime);
+              }
+            } catch (e) {
+              return 0;
+            }
+          });
+          
+          _appointments = fetchedAppointments;
           if (_profile?['name'] != null && _nameController.text.isEmpty) {
             _nameController.text = _profile!['name'];
           }

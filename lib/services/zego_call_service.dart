@@ -76,6 +76,7 @@ class ZegoCallService {
         final config = ZegoCallInvitationInCallingConfig();
         if (data.type == ZegoCallInvitationType.videoCall) {
           return ZegoUIKitPrebuiltCallConfig.oneOnOneVideoCall()
+            ..useSpeakerWhenJoining = true
             ..topMenuBar.isVisible = true
             ..bottomMenuBar.buttons = [
               ZegoCallMenuBarButtonName.toggleCameraButton,

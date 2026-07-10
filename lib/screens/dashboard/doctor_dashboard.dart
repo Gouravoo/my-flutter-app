@@ -40,6 +40,30 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     super.dispose();
   }
 
+  Future<void> _markCompleted(String appointmentId) async {
+    try {
+      await _supabase
+          .from('appointments')
+          .update({'status': 'completed'})
+          .eq('id', appointmentId);
+      
+      if (mounted) {
+        setState(() {
+          final index = _appointments.indexWhere((a) => a['id'].toString() == appointmentId);
+          if (index != -1) {
+            _appointments[index]['status'] = 'completed';
+            _appointments.sort((a, b) => (b['date'] ?? '').compareTo(a['date'] ?? ''));
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Appointment marked as completed'), backgroundColor: AppColors.success),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error marking completed: $e');
+    }
+  }
+
   /// Listen for realtime changes in appointments table so new bookings appear instantly
   void _listenForNewAppointments() {
     final user = _supabase.auth.currentUser;
@@ -74,13 +98,40 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       final appointmentsData = await _supabase
           .from('appointments')
           .select('*')
-          .eq('doctorId', user.id)
-          .order('date', ascending: false);
+          .eq('doctorId', user.id);
 
       if (mounted) {
         setState(() {
           _profile = profileData;
-          _appointments = List<Map<String, dynamic>>.from(appointmentsData);
+          
+          final List<Map<String, dynamic>> fetchedAppointments = List<Map<String, dynamic>>.from(appointmentsData);
+          fetchedAppointments.sort((a, b) {
+            final aStatus = a['status'] ?? 'scheduled';
+            final bStatus = b['status'] ?? 'scheduled';
+            
+            if (aStatus == 'scheduled' && bStatus == 'completed') return -1;
+            if (aStatus == 'completed' && bStatus == 'scheduled') return 1;
+            
+            final aDateStr = a['date'] ?? '';
+            final bDateStr = b['date'] ?? '';
+            final aTimeStr = a['time'] ?? '';
+            final bTimeStr = b['time'] ?? '';
+            
+            try {
+              final aDateTime = DateTime.parse('$aDateStr $aTimeStr');
+              final bDateTime = DateTime.parse('$bDateStr $bTimeStr');
+              
+              if (aStatus == 'scheduled') {
+                return aDateTime.compareTo(bDateTime);
+              } else {
+                return bDateTime.compareTo(aDateTime);
+              }
+            } catch (e) {
+              return 0;
+            }
+          });
+          
+          _appointments = fetchedAppointments;
           _loading = false;
         });
       }
@@ -99,15 +150,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (_) => false,
       );
-    }
-  }
-
-  Future<void> _markCompleted(String id) async {
-    try {
-      await _supabase.from('appointments').update({'status': 'completed'}).eq('id', id);
-      await _fetchData();
-    } catch (e) {
-      debugPrint('Error: $e');
     }
   }
 
@@ -139,10 +181,8 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Main content
             Column(
               children: [
-                // Header with logo
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
@@ -223,7 +263,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           Text('Overview', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 12),
 
-          // Stats
           Row(
             children: [
               Expanded(
@@ -286,7 +325,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
             ],
           ),
 
-          // Next patient
           if (scheduled.isNotEmpty) ...[
             const SizedBox(height: 20),
             Text('Next Patient', style: Theme.of(context).textTheme.titleLarge),
@@ -307,7 +345,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('${scheduled[0]['date']} â€¢ ${scheduled[0]['time']}',
+                      Text('${scheduled[0]['date']} • ${scheduled[0]['time']}',
                           style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -326,30 +364,49 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Age: ${scheduled[0]['patientAge'] ?? 'N/A'} â€¢ ${scheduled[0]['patientPhone'] ?? 'No Phone'}',
+                    'Age: ${scheduled[0]['patientAge'] ?? 'N/A'} • ${scheduled[0]['patientPhone'] ?? 'No Phone'}',
                     style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
                   ),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        final targetUserId = scheduled[0]['patientId'].toString().replaceAll('-', '');
-                        ZegoUIKitPrebuiltCallInvitationService().send(
-                          invitees: [ZegoCallUser(targetUserId, scheduled[0]['patientName'] ?? 'Patient')],
-                          isVideoCall: true,
-                          customData: scheduled[0]['id'].toString(),
-                        );
-                      },
-                      icon: const Icon(Icons.videocam, size: 16),
-                      label: const Text('Start Call'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.secondary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            final targetUserId = scheduled[0]['patientId'].toString().replaceAll('-', '');
+                            ZegoUIKitPrebuiltCallInvitationService().send(
+                              invitees: [ZegoCallUser(targetUserId, scheduled[0]['patientName'] ?? 'Patient')],
+                              isVideoCall: true,
+                              customData: scheduled[0]['id'].toString(),
+                            );
+                          },
+                          icon: const Icon(Icons.videocam, size: 16),
+                          label: const Text('Start Call'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.secondary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.check_circle_outline, size: 16),
+                          label: const Text('Mark Done'),
+                          onPressed: () {
+                            _markCompleted(scheduled[0]['id'].toString());
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withAlpha(200),
+                            foregroundColor: AppColors.secondary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

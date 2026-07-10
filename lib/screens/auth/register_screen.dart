@@ -138,31 +138,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _passwordController,
                 ),
 
-                // Role selector
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'I AM A...',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textMuted,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _buildRoleOption('patient', Icons.favorite_outline, 'Patient'),
-                        const SizedBox(width: 12),
-                        _buildRoleOption('doctor', Icons.medical_services_outlined, 'Doctor'),
-                      ],
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 PrimaryButton(
                   text: 'Register Account',
                   icon: Icons.arrow_forward,
@@ -197,46 +173,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoleOption(String value, IconData icon, String label) {
-    final selected = _role == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _role = value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutBack,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primaryLight : Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? AppColors.primary : Colors.black.withAlpha(15),
-              width: 2,
-            ),
-            boxShadow: selected
-                ? [BoxShadow(color: AppColors.primary.withAlpha(60), blurRadius: 12)]
-                : [],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: selected ? AppColors.primary : AppColors.textMuted),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: selected ? AppColors.primary : AppColors.textMuted,
-                ),
-              ),
-            ],
           ),
         ),
       ),
