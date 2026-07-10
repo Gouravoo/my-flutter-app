@@ -16,7 +16,6 @@ dependencies:
   url_launcher: ^6.3.1
   image_picker: ^1.1.2
   google_fonts: ^6.2.1
-  lucide_icons: ^0.257.0
   zego_uikit_prebuilt_call: ^4.24.2
   zego_uikit_signaling_plugin: ^2.8.21
   flutter_ringtone_player: ^4.0.0+3

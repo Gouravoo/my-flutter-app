@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../services/zego_call_service.dart';

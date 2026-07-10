@@ -61,11 +61,10 @@ class ZegoCallService {
       // Show call invitation on notification when app is in background
       notificationConfig: ZegoCallInvitationNotificationConfig(
         androidNotificationConfig: ZegoCallAndroidNotificationConfig(
-          channelID: 'aarogyaplus_calls',
-          channelName: 'AarogyaPlus Calls',
-          sound: 'call',
-          icon: 'ic_launcher',
-          showFullScreen: true,
+          channelID: 'medicine_tele_call',
+          channelName: 'Call Notifications',
+          sound: 'ringtone',
+          icon: 'notification_icon',
         ),
       ),
       config: ZegoCallInvitationConfig(

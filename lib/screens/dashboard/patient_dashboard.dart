@@ -462,7 +462,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     icon: Icons.videocam,
                     onPressed: () {
                       final targetUserId = scheduled[0]['doctorId'].toString().replaceAll('-', '');
-                      ZegoUIKitPrebuiltCallInvitationService().sendInvitation(
+                      ZegoUIKitPrebuiltCallInvitationService().send(
                         invitees: [ZegoCallUser(targetUserId, 'Dr. Santosh Kumar Singh')],
                         isVideoCall: true,
                         customData: scheduled[0]['id'].toString(),
@@ -547,7 +547,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                                 icon: Icons.videocam,
                                 onPressed: () {
                                   final targetUserId = apt['doctorId'].toString().replaceAll('-', '');
-                                  ZegoUIKitPrebuiltCallInvitationService().sendInvitation(
+                                  ZegoUIKitPrebuiltCallInvitationService().send(
                                     invitees: [ZegoCallUser(targetUserId, 'Dr. Santosh Kumar Singh')],
                                     isVideoCall: true,
                                     customData: apt['id'].toString(),
