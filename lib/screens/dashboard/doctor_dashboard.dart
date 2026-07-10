@@ -56,7 +56,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           }
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Appointment marked as completed'), backgroundColor: AppColors.success),
+          SnackBar(content: Text('Appointment marked as completed'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
