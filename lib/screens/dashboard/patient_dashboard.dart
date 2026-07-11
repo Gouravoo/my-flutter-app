@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,11 +34,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
   final _ageController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _bookingLoading = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _appointmentsSubscription;
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _fetchProfileAndListen();
   }
 
   @override
@@ -45,10 +47,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
     _nameController.dispose();
     _ageController.dispose();
     _phoneController.dispose();
+    _appointmentsSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchProfileAndListen() async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) {
@@ -64,54 +67,51 @@ class _PatientDashboardState extends State<PatientDashboard> {
           .eq('uid', user.id)
           .single();
 
-      final appointmentsData = await _supabase
-          .from('appointments')
-          .select('*')
-          .eq('patientId', user.id);
-
       if (mounted) {
         setState(() {
           _profile = profileData;
-          
-          // In-memory custom sorting
-          final List<Map<String, dynamic>> fetchedAppointments = List<Map<String, dynamic>>.from(appointmentsData);
-          fetchedAppointments.sort((a, b) {
-            final aStatus = a['status'] ?? 'scheduled';
-            final bStatus = b['status'] ?? 'scheduled';
-            
-            // 1. Sort by status (scheduled first, completed second)
-            if (aStatus == 'scheduled' && bStatus == 'completed') return -1;
-            if (aStatus == 'completed' && bStatus == 'scheduled') return 1;
-            
-            // 2. Sort by date (scheduled: nearest first (ascending), completed: most recent first (descending))
-            final aDateStr = a['date'] ?? '';
-            final bDateStr = b['date'] ?? '';
-            final aTimeStr = a['time'] ?? '';
-            final bTimeStr = b['time'] ?? '';
-            
-            try {
-              final aDateTime = DateTime.parse('$aDateStr $aTimeStr');
-              final bDateTime = DateTime.parse('$bDateStr $bTimeStr');
-              
-              if (aStatus == 'scheduled') {
-                return aDateTime.compareTo(bDateTime);
-              } else {
-                return bDateTime.compareTo(aDateTime);
-              }
-            } catch (e) {
-              return 0;
-            }
-          });
-          
-          _appointments = fetchedAppointments;
           if (_profile?['name'] != null && _nameController.text.isEmpty) {
             _nameController.text = _profile!['name'];
           }
-          _loading = false;
         });
       }
+
+      _appointmentsSubscription = _supabase
+          .from('appointments')
+          .stream(primaryKey: ['id'])
+          .eq('patientId', user.id)
+          .listen((data) {
+        if (mounted) {
+          setState(() {
+            final List<Map<String, dynamic>> fetchedAppointments = List<Map<String, dynamic>>.from(data);
+            fetchedAppointments.sort((a, b) {
+              final aStatus = a['status'] ?? 'scheduled';
+              final bStatus = b['status'] ?? 'scheduled';
+              if (aStatus == 'scheduled' && bStatus == 'completed') return -1;
+              if (aStatus == 'completed' && bStatus == 'scheduled') return 1;
+              final aDateStr = a['date'] ?? '';
+              final bDateStr = b['date'] ?? '';
+              final aTimeStr = a['time'] ?? '';
+              final bTimeStr = b['time'] ?? '';
+              try {
+                final aDateTime = DateTime.parse('$aDateStr $aTimeStr');
+                final bDateTime = DateTime.parse('$bDateStr $bTimeStr');
+                if (aStatus == 'scheduled') {
+                  return aDateTime.compareTo(bDateTime);
+                } else {
+                  return bDateTime.compareTo(aDateTime);
+                }
+              } catch (e) {
+                return 0;
+              }
+            });
+            _appointments = fetchedAppointments;
+            _loading = false;
+          });
+        }
+      });
     } catch (e) {
-      debugPrint('Error fetching data: $e');
+      debugPrint('Error fetching profile: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -222,7 +222,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
         'paymentId': paymentId,
       });
 
-      await _fetchData();
+      // Real-time stream will update the UI automatically
       setState(() {
         _activeTab = 0;
         _bookingLoading = false;
@@ -392,7 +392,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: Text('Book Appointment', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                    child: Text('Pay ₹${PaymentService.instance.consultationFee} & Book', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -483,7 +483,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                            child: Text('Book Now', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                            child: Text('Pay ₹${PaymentService.instance.consultationFee} & Book', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
                           ),
                         ),
                       ],
@@ -499,39 +499,44 @@ class _PatientDashboardState extends State<PatientDashboard> {
             const SizedBox(height: 16),
             Text('Upcoming', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            GlassCard(
-              borderLeftColor: AppColors.secondary,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            ...scheduled.map((apt) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: GlassCard(
+                  borderLeftColor: AppColors.secondary,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Date & Time', style: Theme.of(context).textTheme.bodySmall),
-                      const StatusBadge(text: 'Scheduled', color: AppColors.secondary),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Date & Time', style: Theme.of(context).textTheme.bodySmall),
+                          const StatusBadge(text: 'Scheduled', color: AppColors.secondary),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${apt['date']} at ${apt['time']}',
+                        style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 14),
+                      PrimaryButton(
+                        text: 'Join Video Call',
+                        icon: Icons.videocam,
+                        onPressed: () {
+                          final targetUserId = apt['doctorId'].toString().replaceAll('-', '');
+                          ZegoUIKitPrebuiltCallInvitationService().send(
+                            invitees: [ZegoCallUser(targetUserId, 'Dr. Santosh Kumar Singh')],
+                            isVideoCall: true,
+                            customData: apt['id'].toString(),
+                          );
+                        },
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${scheduled[0]['date']} at ${scheduled[0]['time']}',
-                    style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 14),
-                  PrimaryButton(
-                    text: 'Join Video Call',
-                    icon: Icons.videocam,
-                    onPressed: () {
-                      final targetUserId = scheduled[0]['doctorId'].toString().replaceAll('-', '');
-                      ZegoUIKitPrebuiltCallInvitationService().send(
-                        invitees: [ZegoCallUser(targetUserId, 'Dr. Santosh Kumar Singh')],
-                        isVideoCall: true,
-                        customData: scheduled[0]['id'].toString(),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            }).toList(),
           ],
         ],
       ),
@@ -975,7 +980,7 @@ class _BookingSheetState extends State<_BookingSheet> {
             ],
             const SizedBox(height: 16),
             PrimaryButton(
-              text: 'Pay & Book Appointment',
+              text: 'Pay ₹${PaymentService.instance.consultationFee} & Book',
               icon: Icons.payment,
               isLoading: widget.isLoading,
               onPressed: () {

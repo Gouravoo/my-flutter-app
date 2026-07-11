@@ -157,6 +157,24 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     }
   }
 
+  Future<void> _openWhatsApp(String phone) async {
+    if (phone.isEmpty || phone == 'No Phone') return;
+    var cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (!cleanPhone.startsWith('+')) {
+      cleanPhone = '+91$cleanPhone'; // Assuming India default
+    }
+    final url = Uri.parse('https://wa.me/$cleanPhone');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open WhatsApp')),
+        );
+      }
+    }
+  }
+
   void _openPrescriptionSheet(Map<String, dynamic> apt) {
     showModalBottomSheet(
       context: context,
@@ -331,90 +349,115 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
 
           if (scheduled.isNotEmpty) ...[
             const SizedBox(height: 20),
-            Text('Next Patient', style: Theme.of(context).textTheme.titleLarge),
+            Text('Upcoming Appointments', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: AppColors.secondaryGradient,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(color: AppColors.secondary.withAlpha(100), blurRadius: 32, offset: const Offset(0, 8)),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            ...scheduled.map((apt) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.secondaryGradient,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(color: AppColors.secondary.withAlpha(100), blurRadius: 32, offset: const Offset(0, 8)),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${scheduled[0]['date']} • ${scheduled[0]['time']}',
-                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(50),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text('Upcoming', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('${apt['date']} • ${apt['time']}',
+                              style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(50),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('Upcoming', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        apt['patientName'] ?? 'Patient #${apt['patientId'].toString().substring(0, 6)}',
+                        style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Age: ${apt['patientAge'] ?? 'N/A'} • ${apt['patientPhone'] ?? 'No Phone'}',
+                        style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 16),
+                      Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    final targetUserId = apt['patientId'].toString().replaceAll('-', '');
+                                    ZegoUIKitPrebuiltCallInvitationService().send(
+                                      invitees: [ZegoCallUser(targetUserId, apt['patientName'] ?? 'Patient')],
+                                      isVideoCall: true,
+                                      customData: apt['id'].toString(),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.videocam, size: 16),
+                                  label: const Text('Start Call'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: AppColors.secondary,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.message, size: 16),
+                                  label: const Text('WhatsApp'),
+                                  onPressed: () => _openWhatsApp(apt['patientPhone'] ?? ''),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF25D366),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.check_circle_outline, size: 16),
+                              label: const Text('Mark as Completed'),
+                              onPressed: () {
+                                _markCompleted(apt['id'].toString());
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white.withAlpha(50),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    scheduled[0]['patientName'] ?? 'Patient #${scheduled[0]['patientId'].toString().substring(0, 6)}',
-                    style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.w700, color: Colors.white),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Age: ${scheduled[0]['patientAge'] ?? 'N/A'} • ${scheduled[0]['patientPhone'] ?? 'No Phone'}',
-                    style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            final targetUserId = scheduled[0]['patientId'].toString().replaceAll('-', '');
-                            ZegoUIKitPrebuiltCallInvitationService().send(
-                              invitees: [ZegoCallUser(targetUserId, scheduled[0]['patientName'] ?? 'Patient')],
-                              isVideoCall: true,
-                              customData: scheduled[0]['id'].toString(),
-                            );
-                          },
-                          icon: const Icon(Icons.videocam, size: 16),
-                          label: const Text('Start Call'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.secondary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.check_circle_outline, size: 16),
-                          label: const Text('Mark Done'),
-                          onPressed: () {
-                            _markCompleted(scheduled[0]['id'].toString());
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withAlpha(200),
-                            foregroundColor: AppColors.secondary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            }).toList(),
           ],
         ],
       ),
@@ -514,11 +557,28 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _openWhatsApp(apt['patientPhone'] ?? ''),
+                                icon: const Icon(Icons.message, size: 16),
+                                label: const Text('WA', style: TextStyle(fontSize: 12)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
                               child: SecondaryButton(
                                 text: 'Done',
                                 icon: Icons.check_circle,
                                 color: AppColors.secondary,
-                                onPressed: () => _markCompleted(apt['id'].toString()),
+                                onPressed: () {
+                                  _markCompleted(apt['id'].toString());
+                                },
                               ),
                             ),
                           ],

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:auto_start_flutter/auto_start_flutter.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 /// Guides users (even non-tech-savvy ones) through enabling
 /// background permissions so calls ring when the app is closed.

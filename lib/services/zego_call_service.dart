@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
-import '../core/offline_call_setup_helper.dart';
+
 
 /// Manages Zego Call Invitation Service for background/offline call ringing.
 ///
@@ -60,21 +60,12 @@ class ZegoCallService {
       userName: userName,
       plugins: [ZegoUIKitSignalingPlugin()],
       // Show call invitation on notification when app is in background
-      notificationConfig: ZegoCallInvitationNotificationConfig(
-        androidNotificationConfig: ZegoCallAndroidNotificationConfig(
-          channelID: 'medicine_tele_call',
-          channelName: 'Call Notifications',
-          showBackgroundUIConfirmDialog: false, // Disables Zego's default English popup
-        ),
-      ),
+      notificationConfig: ZegoCallInvitationNotificationConfig(),
       config: ZegoCallInvitationConfig(
         endCallWhenInitiatorLeave: true,
-        canInvitingInCalling: false,
         permissions: [
           ZegoCallInvitationPermission.camera,
           ZegoCallInvitationPermission.microphone,
-          ZegoCallInvitationPermission.systemAlertWindow,
-          ZegoCallInvitationPermission.manuallyByUser,
         ],
       ),
       requireConfig: (ZegoCallInvitationData data) {
@@ -98,7 +89,7 @@ class ZegoCallService {
     );
 
     // Prompt user for background permissions gracefully
-    OfflineCallSetupHelper.checkAndRequestPermissions(context);
+    // OfflineCallSetupHelper.checkAndRequestPermissions(context);
 
     _initialized = true;
     debugPrint('✅ Zego Call Invitation Service initialized for $userName ($zegoUserId)');
