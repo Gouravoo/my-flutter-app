@@ -69,12 +69,11 @@ class ZegoCallService {
       config: ZegoCallInvitationConfig(
         endCallWhenInitiatorLeave: true,
         canInvitingInCalling: false,
-        // REQUEST ALL 4 PERMISSIONS - this is critical for offline/background calls!
         permissions: [
           ZegoCallInvitationPermission.camera,
           ZegoCallInvitationPermission.microphone,
-          ZegoCallInvitationPermission.systemAlertWindow,   // CRITICAL: allows call popup on lock screen / killed app
-          ZegoCallInvitationPermission.manuallyByUser,      // Guides user to enable AutoStart & Battery settings
+          ZegoCallInvitationPermission.systemAlertWindow,
+          ZegoCallInvitationPermission.manuallyByUser,
         ],
       ),
       requireConfig: (ZegoCallInvitationData data) {

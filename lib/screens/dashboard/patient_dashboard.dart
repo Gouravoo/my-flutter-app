@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../services/zego_call_service.dart';
+import '../../services/payment_service.dart';
 import '../auth/login_screen.dart';
+import '../settings/contact_us_screen.dart';
+import '../settings/about_screen.dart';
+import '../settings/privacy_policy_screen.dart';
+import '../settings/terms_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -180,16 +184,42 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
       final doctorId = doctors[0]['uid'];
 
+      // --- RAZORPAY PAYMENT ---
+      final paymentSuccess = await PaymentService.instance.processPayment(
+        context: context,
+        patientName: _nameController.text,
+        patientPhone: _phoneController.text,
+        patientEmail: _profile?['email'] ?? '',
+      );
+
+      if (!paymentSuccess) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment failed or cancelled. Appointment not booked.'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+          setState(() => _bookingLoading = false);
+        }
+        return;
+      }
+
+      // Payment succeeded — now save the appointment
+      final fee = PaymentService.instance.consultationFee;
+      final paymentId = PaymentService.instance.lastPaymentId ?? '';
+
       await _supabase.from('appointments').insert({
         'patientId': _profile!['uid'],
         'doctorId': doctorId,
         'date': _selectedDate,
         'time': _selectedTime,
         'status': 'scheduled',
-        'fee': 0,
+        'fee': fee,
         'patientName': _nameController.text,
         'patientAge': _ageController.text,
         'patientPhone': _phoneController.text,
+        'paymentId': paymentId,
       });
 
       await _fetchData();
@@ -200,8 +230,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Appointment booked successfully!'),
+          SnackBar(
+            content: Text('✅ Payment of ₹$fee successful! Appointment booked.'),
             backgroundColor: AppColors.secondary,
           ),
         );
@@ -209,7 +239,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving appointment: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
         setState(() => _bookingLoading = false);
       }
@@ -645,25 +675,90 @@ class _PatientDashboardState extends State<PatientDashboard> {
                   _profile?['email'] ?? '',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _handleLogout,
-                    icon: const Icon(Icons.logout, size: 16),
-                    label: const Text('Log Out'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.dangerLight,
-                      foregroundColor: AppColors.danger,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
+          const SizedBox(height: 8),
+
+          // Settings Menu
+          _buildSettingsItem(
+            icon: Icons.mail_outline,
+            title: 'Contact Us',
+            subtitle: 'Get help & support',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactUsScreen())),
+          ),
+          _buildSettingsItem(
+            icon: Icons.info_outline,
+            title: 'About',
+            subtitle: 'App info & version',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
+          ),
+          _buildSettingsItem(
+            icon: Icons.shield_outlined,
+            title: 'Privacy Policy',
+            subtitle: 'How we protect your data',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
+          ),
+          _buildSettingsItem(
+            icon: Icons.description_outlined,
+            title: 'Terms of Service',
+            subtitle: 'Usage terms & conditions',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsScreen())),
+          ),
+
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _handleLogout,
+              icon: const Icon(Icons.logout, size: 16),
+              label: const Text('Log Out'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.dangerLight,
+                foregroundColor: AppColors.danger,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: AppColors.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.textLight),
         ],
       ),
     );
@@ -880,8 +975,8 @@ class _BookingSheetState extends State<_BookingSheet> {
             ],
             const SizedBox(height: 16),
             PrimaryButton(
-              text: 'Confirm Appointment',
-              icon: Icons.check_circle_outline,
+              text: 'Pay & Book Appointment',
+              icon: Icons.payment,
               isLoading: widget.isLoading,
               onPressed: () {
                 if (_date.isEmpty || _time.isEmpty ||

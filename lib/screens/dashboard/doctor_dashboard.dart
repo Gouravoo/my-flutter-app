@@ -11,6 +11,10 @@ import '../../core/theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../services/zego_call_service.dart';
 import '../auth/login_screen.dart';
+import '../settings/contact_us_screen.dart';
+import '../settings/about_screen.dart';
+import '../settings/privacy_policy_screen.dart';
+import '../settings/terms_screen.dart';
 
 class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({super.key});
@@ -556,25 +560,90 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                 Text('Dr. ${_profile?['name'] ?? 'Doctor'}', style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 4),
                 Text(_profile?['email'] ?? '', style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _handleLogout,
-                    icon: const Icon(Icons.logout, size: 16),
-                    label: const Text('Log Out'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.dangerLight,
-                      foregroundColor: AppColors.danger,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
+          const SizedBox(height: 8),
+
+          // Settings Menu
+          _buildSettingsItem(
+            icon: Icons.mail_outline,
+            title: 'Contact Us',
+            subtitle: 'Get help & support',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactUsScreen())),
+          ),
+          _buildSettingsItem(
+            icon: Icons.info_outline,
+            title: 'About',
+            subtitle: 'App info & version',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
+          ),
+          _buildSettingsItem(
+            icon: Icons.shield_outlined,
+            title: 'Privacy Policy',
+            subtitle: 'How we protect your data',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
+          ),
+          _buildSettingsItem(
+            icon: Icons.description_outlined,
+            title: 'Terms of Service',
+            subtitle: 'Usage terms & conditions',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsScreen())),
+          ),
+
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _handleLogout,
+              icon: const Icon(Icons.logout, size: 16),
+              label: const Text('Log Out'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.dangerLight,
+                foregroundColor: AppColors.danger,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: AppColors.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.textLight),
         ],
       ),
     );

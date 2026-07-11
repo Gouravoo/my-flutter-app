@@ -3,33 +3,24 @@ import 'dart:io';
 import 'package:auto_start_flutter/auto_start_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+/// Guides users (even non-tech-savvy ones) through enabling
+/// background permissions so calls ring when the app is closed.
 class OfflineCallSetupHelper {
   static Future<void> checkAndRequestPermissions(BuildContext context) async {
     if (!Platform.isAndroid) return;
 
     try {
-      // 1. Check if Battery Optimization is disabled
       final isBatteryOptDisabled = await isBatteryOptimizationDisabled ?? true;
-      // 2. Check if AutoStart is available
       final autoStartAvailable = await isAutoStartAvailable ?? false;
 
-      // We only prompt if they haven't set these up, and the device supports AutoStart (like Xiaomi/Oppo/Vivo).
+      // Only show if something needs to be set up
       if (!isBatteryOptDisabled || autoStartAvailable) {
-        // Wait for a brief moment after screen load
         await Future.delayed(const Duration(seconds: 2));
-
         if (!context.mounted) return;
-
-        // Verify if we actually need to ask (double check)
-        bool needsBattery = !isBatteryOptDisabled;
-        
-        // Show elegant dialog
-        if (needsBattery || autoStartAvailable) {
-          _showSetupDialog(context, needsBattery, autoStartAvailable);
-        }
+        _showSetupDialog(context, !isBatteryOptDisabled, autoStartAvailable);
       }
     } catch (e) {
-      debugPrint('Error checking offline call permissions: $e');
+      debugPrint('OfflineCallSetupHelper error: $e');
     }
   }
 
@@ -37,35 +28,90 @@ class OfflineCallSetupHelper {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('☎️ Background Call Setup', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text(
-          'To ensure you receive calls even when the app is closed or your screen is locked, you must enable background execution permissions.',
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.phone_in_talk_rounded, size: 48, color: Colors.green.shade700),
+              ),
+              const SizedBox(height: 16),
+
+              // Title - simple Hindi
+              const Text(
+                '📞 Call Setup Zaruri Hai',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+
+              // Simple explanation
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Agar aap ye setup nahi karenge toh phone band hone par doctor/patient ki call nahi aayegi.\n\n'
+                  '👇 Neeche button dabao, phone apne aap settings kholega — bas "Allow" ya "ON" karo.',
+                  style: TextStyle(fontSize: 15, height: 1.5),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Big, clear "Setup Now" button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                  icon: const Icon(Icons.settings, size: 22),
+                  label: const Text('✅  Setup Karo (1 minute)'),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+
+                    // Step 1: Battery optimization — shows system dialog, user just taps "Allow"
+                    if (needsBattery) {
+                      await disableBatteryOptimization();
+                      await Future.delayed(const Duration(seconds: 1));
+                    }
+
+                    // Step 2: AutoStart — opens settings page, user toggles ON
+                    if (needsAutoStart) {
+                      await getAutoStartPermission();
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // "Later" option - small and subtle
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Baad mein karunga',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Later', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              if (needsAutoStart) {
-                await getAutoStartPermission();
-                await Future.delayed(const Duration(seconds: 1)); // small delay between intents
-              }
-              if (needsBattery) {
-                await disableBatteryOptimization();
-              }
-            },
-            child: const Text('Setup Now'),
-          ),
-        ],
       ),
     );
   }
