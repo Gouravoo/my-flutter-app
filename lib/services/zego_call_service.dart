@@ -64,6 +64,7 @@ class ZegoCallService {
         androidNotificationConfig: ZegoCallAndroidNotificationConfig(
           channelID: 'medicine_tele_call',
           channelName: 'Call Notifications',
+          showBackgroundUIConfirmDialog: false, // Disables Zego's default English popup
         ),
       ),
       config: ZegoCallInvitationConfig(
