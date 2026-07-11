@@ -7,15 +7,27 @@ import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
 import 'screens/splash_screen.dart';
 import 'core/theme.dart';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 final navigatorKey = GlobalKey<NavigatorState>();
 
-// Zego handles its own FCM offline pushes, avoiding conflict.
+/// Define a background messaging handler for offline calls
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  ZegoUIKitPrebuiltCallInvitationService().useSystemCallingUI(
+    [ZegoUIKitSignalingPlugin()],
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (still needed for Zego FCM to work internally on some setups)
+  // Initialize Firebase
   await Firebase.initializeApp();
+
+  // Register background handler for FCM
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   await Supabase.initialize(
     url: 'https://bzckanmfgkcljvsroamr.supabase.co',
