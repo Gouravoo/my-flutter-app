@@ -67,9 +67,15 @@ class ZegoCallService {
         ),
       ),
       config: ZegoCallInvitationConfig(
-        // Custom ringtone settings
         endCallWhenInitiatorLeave: true,
-        canInvitingInCalling: false, // Don't allow calling while in a call
+        canInvitingInCalling: false,
+        // REQUEST ALL 4 PERMISSIONS - this is critical for offline/background calls!
+        permissions: [
+          ZegoCallInvitationPermission.camera,
+          ZegoCallInvitationPermission.microphone,
+          ZegoCallInvitationPermission.systemAlertWindow,   // CRITICAL: allows call popup on lock screen / killed app
+          ZegoCallInvitationPermission.manuallyByUser,      // Guides user to enable AutoStart & Battery settings
+        ],
       ),
       requireConfig: (ZegoCallInvitationData data) {
         if (data.type == ZegoCallInvitationType.videoCall) {
